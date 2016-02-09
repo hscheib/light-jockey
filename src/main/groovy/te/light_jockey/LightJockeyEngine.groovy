@@ -4,7 +4,7 @@ import com.google.common.base.Stopwatch
 import groovy.util.logging.Slf4j
 import te.light_jockey.domain.LightJockeySettings
 import te.light_jockey.domain.echo_nest.EchoNestSearch
-import te.light_jockey.domain.hue.LightTransition
+import te.light_jockey.domain.hue.LightTransitionState
 import te.light_jockey.domain.sonos.SonosZoneStatus
 import te.light_jockey.rest_services.EchoNestService
 import te.light_jockey.rest_services.PhillipsHueService
@@ -23,7 +23,7 @@ class LightJockeyEngine extends TimerTask {
 
     Stopwatch timer = Stopwatch.createStarted()
     String currentSongTitle = 'No track'
-    LightTransition lightTransition = new LightTransition()
+    LightTransitionState lightTransitionState = new LightTransitionState()
 
     LightJockeyEngine(LightJockeySettings settings) {
         log.info(settings.toString())
@@ -45,17 +45,17 @@ class LightJockeyEngine extends TimerTask {
         }
 
         if (zoneStatus.isCurrentlyPlaying(currentSongTitle)) {
-            log.info("\r${lightTransition.secondsBetweenTransitions - timer.elapsed(SECONDS)} seconds until next transition...")
+            log.info("\r${lightTransitionState.secondsBetweenTransitions - timer.elapsed(SECONDS)} seconds until next transition...")
         } else if(!zoneStatus.isCurrentlyPlaying(currentSongTitle)) {
             log.info("New song detected: $zoneStatus.currentSong.title by $zoneStatus.currentSong.artist")
             currentSongTitle = zoneStatus.currentSong.title
 
             EchoNestSearch search = echoNestService.search(zoneStatus.currentSong)
-            lightTransition = hueService.buildLightTransition(search)
+            lightTransitionState = lightTransitionState.updateState(search)
 
             transitionAllLights()
             resetTimer()
-        } else if (timer.elapsed(SECONDS) >= lightTransition.secondsBetweenTransitions) {
+        } else if (timer.elapsed(SECONDS) >= lightTransitionState.secondsBetweenTransitions) {
             transitionAllLights()
             resetTimer()
         }
@@ -72,10 +72,9 @@ class LightJockeyEngine extends TimerTask {
 
     // TODO: In the future, maybe randomly use the same payload for all lights so they sync temporarily.  Might look cool.
     private void transitionAllLights() {
-        Map transitionPayload = hueService.buildTransitionPayload(lightTransition)
         log.info "Transitioning lights now."
         settings.lightIds.each { lightId ->
-            hueService.triggerLightTransition(lightId, transitionPayload)
+            hueService.triggerLightTransition(lightId, lightTransitionState)
         }
     }
 

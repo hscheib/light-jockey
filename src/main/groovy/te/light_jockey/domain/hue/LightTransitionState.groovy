@@ -1,11 +1,19 @@
 package te.light_jockey.domain.hue
 
-import groovy.transform.ToString
 import groovy.util.logging.Slf4j
+import te.light_jockey.domain.echo_nest.EchoNestSearch
+import te.light_jockey.domain.echo_nest.EchoNestSong
+
+import java.math.MathContext
+import java.math.RoundingMode
 
 @Slf4j
-@ToString(includeNames = true)
-class LightTransition {
+class LightTransitionState {
+    public static final MathContext TO_WHOLE_NUMBER = new MathContext(1, RoundingMode.HALF_UP)
+    public static final int DANCEABILITY_DEFAULT = 50
+    public static final int ENERGY_DEFAULT = 50
+    public static final int TEMPO_DEFAULT = 100
+
     Double percentChanceToTurnOff
     int secondsBetweenTransitions = 10
     int transitionDuration = 10
@@ -13,9 +21,20 @@ class LightTransition {
     int maxBrightness = 100
     int saturation = 100
 
-    LightTransition(){}
+    void updateState(EchoNestSearch search) {
+        Integer danceability = DANCEABILITY_DEFAULT
+        Integer energy = ENERGY_DEFAULT
+        Integer tempo = TEMPO_DEFAULT
 
-    LightTransition(Integer danceability, Integer energy, Integer tempo) {
+        if (search.hasResults() && search.songs.first().hasMetadata()) {
+            EchoNestSong.Metadata metadata = search.songs.first().metadata
+            danceability = (metadata.danceability * 100).round(TO_WHOLE_NUMBER).toInteger()
+            energy = (metadata.energy * 100).round(TO_WHOLE_NUMBER).toInteger()
+            tempo = (metadata.tempo * 100).round(TO_WHOLE_NUMBER).toInteger()
+        }
+
+        log.info "Danceability = ${danceability}% | Energy = ${energy}% | Tempo = ${tempo}bpm"
+
         // Higher tempo = faster transitions that are more frequent
         switch (tempo) {
             case (0..100):
@@ -89,6 +108,16 @@ class LightTransition {
                 percentChanceToTurnOff = 0.4
         }
 
-        log.debug(this.toString())
+        log.debug("State updated to {}", this.toString())
+    }
+
+    String toString(){
+        String classStateAsString = "${this.class.simpleName}("
+        properties.each { key, value ->
+            if(key != 'class') {
+                classStateAsString += "\n\t$key = $value"
+            }
+        }
+        return classStateAsString.toString() + "\n)"
     }
 }
